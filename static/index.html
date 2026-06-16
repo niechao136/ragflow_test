@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -179,12 +180,25 @@
             animation: bounce 1.4s infinite ease-in-out both;
         }
 
-        .loading-dot:nth-child(1) { animation-delay: -0.32s; }
-        .loading-dot:nth-child(2) { animation-delay: -0.16s; }
+        .loading-dot:nth-child(1) {
+            animation-delay: -0.32s;
+        }
+
+        .loading-dot:nth-child(2) {
+            animation-delay: -0.16s;
+        }
 
         @keyframes bounce {
-            0%, 80%, 100% { transform: scale(0); }
-            40% { transform: scale(1); }
+
+            0%,
+            80%,
+            100% {
+                transform: scale(0);
+            }
+
+            40% {
+                transform: scale(1);
+            }
         }
 
         .context-info {
@@ -217,6 +231,21 @@
             background: #dc3545;
         }
 
+        .new-chat-btn {
+            padding: 4px 12px;
+            background: #e9ecef;
+            color: #495057;
+            border: none;
+            border-radius: 12px;
+            font-size: 11px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .new-chat-btn:hover {
+            background: #dee2e6;
+        }
+
         @media (max-width: 600px) {
             .chat-container {
                 height: 90vh;
@@ -228,6 +257,7 @@
         }
     </style>
 </head>
+
 <body>
     <div class="chat-container">
         <div class="chat-header">
@@ -253,7 +283,10 @@
 
         <div class="status-bar">
             <span><span class="status-dot" id="status-dot"></span>服务状态</span>
-            <span id="response-time">响应时间: -- ms</span>
+            <div style="display: flex; gap: 12px;">
+                <span id="response-time">响应时间: -- ms</span>
+                <button class="new-chat-btn" id="new-chat-btn">新对话</button>
+            </div>
         </div>
     </div>
 
@@ -261,10 +294,12 @@
         const messagesContainer = document.getElementById('messages');
         const questionInput = document.getElementById('question');
         const sendBtn = document.getElementById('send-btn');
+        const newChatBtn = document.getElementById('new-chat-btn');
         const statusDot = document.getElementById('status-dot');
         const responseTime = document.getElementById('response-time');
 
         let isLoading = false;
+        let conversationId = null;
 
         async function checkHealth() {
             try {
@@ -279,18 +314,18 @@
         function addMessage(text, type) {
             const messageDiv = document.createElement('div');
             messageDiv.className = `message ${type}`;
-            
+
             const bubbleDiv = document.createElement('div');
             bubbleDiv.className = 'message-bubble';
             bubbleDiv.textContent = text;
-            
+
             const metaDiv = document.createElement('div');
             metaDiv.className = 'message-meta';
             metaDiv.textContent = type === 'user' ? '你' : '助手';
-            
+
             messageDiv.appendChild(bubbleDiv);
             messageDiv.appendChild(metaDiv);
-            
+
             messagesContainer.appendChild(messageDiv);
             messagesContainer.scrollTop = messagesContainer.scrollHeight;
         }
@@ -309,15 +344,15 @@
             isLoading = true;
             sendBtn.disabled = true;
             sendBtn.innerHTML = '<span class="loading"><span class="loading-dot"></span><span class="loading-dot"></span><span class="loading-dot"></span></span>';
-            
+
             const loadingDiv = document.createElement('div');
             loadingDiv.className = 'message assistant';
             loadingDiv.id = 'loading-message';
-            
+
             const bubbleDiv = document.createElement('div');
             bubbleDiv.className = 'message-bubble';
             bubbleDiv.innerHTML = '<span class="loading"><span class="loading-dot"></span><span class="loading-dot"></span><span class="loading-dot"></span></span> 正在检索并生成回答...';
-            
+
             loadingDiv.appendChild(bubbleDiv);
             messagesContainer.appendChild(loadingDiv);
             messagesContainer.scrollTop = messagesContainer.scrollHeight;
@@ -327,11 +362,24 @@
             isLoading = false;
             sendBtn.disabled = false;
             sendBtn.textContent = '发送';
-            
+
             const loadingMessage = document.getElementById('loading-message');
             if (loadingMessage) {
                 loadingMessage.remove();
             }
+        }
+
+        function startNewChat() {
+            conversationId = null;
+            messagesContainer.innerHTML = `
+                <div class="message assistant">
+                    <div class="message-bubble">
+                        你好！我是基于 RAGFlow 知识库的问答助手。请输入你的问题，我会帮你检索相关文档并给出回答。
+                    </div>
+                    <div class="message-meta">助手</div>
+                </div>
+            `;
+            responseTime.textContent = '响应时间: -- ms';
         }
 
         async function sendMessage() {
@@ -345,12 +393,17 @@
             const startTime = Date.now();
 
             try {
+                const payload = {
+                    question: question,
+                    conversation_id: conversationId
+                };
+
                 const response = await fetch('/api/chat', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
                     },
-                    body: JSON.stringify({ question: question }),
+                    body: JSON.stringify(payload),
                 });
 
                 if (!response.ok) {
@@ -360,10 +413,14 @@
 
                 const data = await response.json();
                 const endTime = Date.now();
-                
+
+                if (!conversationId && data.conversation_id) {
+                    conversationId = data.conversation_id;
+                }
+
                 hideLoading();
                 addMessage(data.answer, 'assistant');
-                addContextInfo(data.context_count);
+                // addContextInfo(data.context_count);
                 responseTime.textContent = `响应时间: ${endTime - startTime} ms`;
             } catch (error) {
                 hideLoading();
@@ -372,6 +429,7 @@
         }
 
         sendBtn.addEventListener('click', sendMessage);
+        newChatBtn.addEventListener('click', startNewChat);
 
         questionInput.addEventListener('keypress', (e) => {
             if (e.key === 'Enter') {
@@ -380,7 +438,8 @@
         });
 
         checkHealth();
-        setInterval(checkHealth, 10000);
+        setInterval(checkHealth, 30000);
     </script>
 </body>
+
 </html>

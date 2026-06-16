@@ -17,30 +17,25 @@ tool_node = ToolNode(tools=tool)
 
 
 async def call_agent(state: AgentState, config: RunnableConfig):
-    """调用智能体"""
     sys_msg = SystemMessage(content=SYSTEM_PROMPT)
     response = await llm_with_tools.ainvoke([sys_msg] + state.messages, config)
-    return AgentState(messages=[response])
+    return {"messages": [response]}
 
 
 def should_continue(state: AgentState):
-    """
-    判断逻辑：
-    如果模型最后一条消息包含 tool_calls，则跳转到 tools 节点；
-    否则结束会话。
-    """
     messages = state.messages
     last_message = messages[-1]
 
     if isinstance(last_message, AIMessage) and last_message.tool_calls:
         return "tools"
-    return "end"
+    return END
 
 
 graph_builder = StateGraph(AgentState)
 graph_builder.add_node("agent", call_agent)
 graph_builder.add_node("tools", tool_node)
 graph_builder.add_edge(START, "agent")
-graph_builder.add_conditional_edges("agent", should_continue, {"tools": "tools", "end": END})
+graph_builder.add_conditional_edges("agent", should_continue, {"tools": "tools", END: END})
+graph_builder.add_edge("tools", "agent")
 
 graph = graph_builder.compile()
