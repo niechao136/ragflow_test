@@ -1,5 +1,6 @@
 from langchain_core.messages import SystemMessage, AIMessage
 from langchain_core.runnables import RunnableConfig
+from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph import StateGraph, START, END
 from langgraph.prebuilt import ToolNode
 
@@ -38,4 +39,4 @@ graph_builder.add_edge(START, "agent")
 graph_builder.add_conditional_edges("agent", should_continue, {"tools": "tools", END: END})
 graph_builder.add_edge("tools", "agent")
 
-graph = graph_builder.compile()
+graph = graph_builder.compile(checkpointer=InMemorySaver())

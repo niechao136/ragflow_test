@@ -208,6 +208,43 @@
             font-weight: 500;
         }
 
+        .file-references {
+            margin-top: 8px;
+            padding: 8px 12px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            border-left: 3px solid #667eea;
+        }
+
+        .file-references-title {
+            font-size: 11px;
+            color: #667eea;
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+
+        .file-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 11px;
+            color: #495057;
+            margin-bottom: 3px;
+        }
+
+        .file-item:last-child {
+            margin-bottom: 0;
+        }
+
+        .file-icon {
+            font-size: 12px;
+        }
+
+        .file-path {
+            color: #6c757d;
+            font-family: 'Consolas', 'Monaco', monospace;
+        }
+
         .status-bar {
             display: flex;
             justify-content: space-between;
@@ -300,6 +337,7 @@
 
         let isLoading = false;
         let conversationId = null;
+        let datasetId = null;
 
         async function checkHealth() {
             try {
@@ -337,6 +375,55 @@
                 infoDiv.className = 'context-info';
                 infoDiv.textContent = `📚 检索到 ${count} 条相关文档`;
                 lastMessage.appendChild(infoDiv);
+            }
+        }
+
+        function addFileReferences(references) {
+            const lastMessage = messagesContainer.lastElementChild;
+            if (lastMessage && lastMessage.classList.contains('assistant') && references && references.length > 0) {
+                const referencesDiv = document.createElement('div');
+                referencesDiv.className = 'file-references';
+
+                const sources = [];
+                const check = {};
+                references.forEach(ref => {
+                    if (!check[ref.document_id]) {
+                        check[ref.document_id] = true;
+                        sources.push(ref);
+                    }
+                })
+
+                addContextInfo(sources.length);
+                const titleDiv = document.createElement('div');
+                titleDiv.className = 'file-references-title';
+                titleDiv.textContent = `📁 关联文件 (${sources.length})`;
+                referencesDiv.appendChild(titleDiv);
+
+                sources.forEach(ref => {
+                    const fileDiv = document.createElement('div');
+                    fileDiv.className = 'file-item';
+
+                    const iconSpan = document.createElement('span');
+                    iconSpan.className = 'file-icon';
+                    iconSpan.textContent = '📄';
+
+                    const docNameSpan = document.createElement('span');
+                    docNameSpan.textContent = ref.document_name;
+
+                    const pathDiv = document.createElement('div');
+                    const datasetId = ref.dataset_id;
+                    const fileName = ref.document_name;
+                    pathDiv.className = 'file-path';
+                    pathDiv.textContent = `file/${datasetId}/${fileName}`;
+
+                    fileDiv.appendChild(iconSpan);
+                    fileDiv.appendChild(docNameSpan);
+                    fileDiv.appendChild(pathDiv);
+
+                    referencesDiv.appendChild(fileDiv);
+                });
+
+                lastMessage.appendChild(referencesDiv);
             }
         }
 
@@ -420,7 +507,7 @@
 
                 hideLoading();
                 addMessage(data.answer, 'assistant');
-                // addContextInfo(data.context_count);
+                addFileReferences(data.sources);
                 responseTime.textContent = `响应时间: ${endTime - startTime} ms`;
             } catch (error) {
                 hideLoading();

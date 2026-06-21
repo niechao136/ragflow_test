@@ -1,9 +1,11 @@
+import json
 import uuid
 from typing import List, Optional
 from langchain_core.messages import HumanMessage
 from langchain_core.runnables import RunnableConfig
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -18,10 +20,18 @@ class QuestionRequest(BaseModel):
     top_k: int = 5
 
 
+class SourceDocument(BaseModel):
+    document_id: str = ""
+    document_name: str = ""
+    score: float = 0.0
+    dataset_id: str = ""
+
+
 class AnswerResponse(BaseModel):
     question: str
     answer: str
     context_count: int = 0
+    sources: List[SourceDocument] = []
 
 
 app = FastAPI(title="LangGraph + RAGFlow API", version="1.0.0")
@@ -36,30 +46,90 @@ app.add_middleware(
 )
 
 
+def _make_config(request: QuestionRequest, conversation_id: str) -> RunnableConfig:
+    return {
+        "configurable": {
+            "thread_id": conversation_id,
+            "dataset_ids": request.dataset_ids,
+            "top_k": request.top_k,
+        }
+    }
+
+
 @app.post("/api/chat", response_model=AnswerResponse)
 async def chat(request: QuestionRequest):
     if not request.question.strip():
         raise HTTPException(status_code=400, detail="问题不能为空")
 
-    input_msg = HumanMessage(content=request.question)
     conversation_id = request.conversation_id or str(uuid.uuid4())
-    config: RunnableConfig = {
-        "configurable": {
-            "thread_id": conversation_id,
-            "dataset_ids": request.dataset_ids,
-            "top_k": request.top_k
-        }
-    }
+    config = _make_config(request, conversation_id)
 
-    result = await graph.ainvoke({"messages": [input_msg]}, config=config) # type: ignore
+    sources = []
 
-    last_message = result["messages"][-1]
+    async for event in graph.astream_events(
+        {"messages": [HumanMessage(content=request.question)]}, # type: ignore
+        config=config,
+        version="v2",
+    ):
+        if (
+            event["event"] == "on_custom_event"
+            and event["name"] == "retrieved_sources"
+        ):
+            for s in event["data"].get("sources", []):
+                sources.append(SourceDocument(**s))
+
+    result = await graph.aget_state(config)
+
+    last_message = result.values["messages"][-1]
     answer = last_message.content if hasattr(last_message, 'content') else str(last_message)
 
     return AnswerResponse(
         question=request.question,
         answer=answer,
-        context_count=0
+        sources=sources,
+        context_count=len(sources),
+    )
+
+
+@app.post("/api/chat/stream")
+async def chat_stream(request: QuestionRequest):
+    if not request.question.strip():
+        raise HTTPException(status_code=400, detail="问题不能为空")
+
+    conversation_id = request.conversation_id or str(uuid.uuid4())
+    config = _make_config(request, conversation_id)
+
+    async def event_generator():
+        # 先告知前端 conversation_id
+        yield f"data: {json.dumps({'type': 'meta', 'conversation_id': conversation_id})}\n\n"
+
+        async for event in graph.astream_events(
+            {"messages": [HumanMessage(content=request.question)]}, # type: ignore
+            config=config,
+            version="v2",
+        ):
+            kind = event["event"]
+
+            # LLM 输出 token
+            if kind == "on_chat_model_stream":
+                chunk = event["data"]["chunk"].content
+                if chunk:
+                    yield f"data: {json.dumps({'type': 'token', 'content': chunk})}\n\n"
+
+            # 检索到的文档来源
+            elif kind == "on_custom_event" and event["name"] == "retrieved_sources":
+                sources = event["data"].get("sources", [])
+                yield f"data: {json.dumps({'type': 'sources', 'sources': sources})}\n\n"
+
+        yield f"data: {json.dumps({'type': 'done'})}\n\n"
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",  # 关闭 nginx 缓冲，避免流式卡顿
+        },
     )
 
 
@@ -69,6 +139,7 @@ async def health():
     return {"status": "healthy", "ragflow_connected": ragflow_connected}
 
 
+app.mount("/file", StaticFiles(directory="file"), name="file")
 app.mount("/", StaticFiles(directory="static", html=True), name="static")
 
 

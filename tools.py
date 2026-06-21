@@ -1,6 +1,8 @@
 import os
+import json
 from typing import List, Optional
 from langchain_core.tools import tool
+from langchain_core.callbacks import adispatch_custom_event
 from langchain_core.runnables import RunnableConfig
 from ragflow_sdk import RAGFlow, Chunk
 from dotenv import load_dotenv
@@ -34,7 +36,7 @@ def get_top_k(config: Optional[RunnableConfig] = None) -> int:
 
 
 @tool
-def ragflow_retrieve(query: str, config: Optional[RunnableConfig] = None) -> str:
+async def ragflow_retrieve(query: str, config: Optional[RunnableConfig] = None) -> str:
     """从 RAGFlow 知识库中检索相关内容"""
     
     dataset_ids = get_dataset_ids(config)
@@ -48,4 +50,29 @@ def ragflow_retrieve(query: str, config: Optional[RunnableConfig] = None) -> str
         dataset_ids=dataset_ids,
         top_k=top_k
     )
+
+    sources = []
+    check = {}
+    for c in chunks:
+        if c.document_id in check:
+            document_name = check[c.document_id]
+        else:
+            datasets = rag.list_datasets(id=c.dataset_id)
+            dataset = datasets[0]
+            docs = dataset.list_documents(id=c.document_id)
+            document_name = docs[0].name
+            check[c.document_id] = document_name
+        sources.append({
+            "dataset_id": c.dataset_id,
+            "document_id": c.document_id,
+            "document_name": document_name,
+            "score": c.similarity
+        })
+
+    await adispatch_custom_event(
+        "retrieved_sources",
+        {"sources": sources},
+        config=config,
+    )
+
     return "\n\n".join([c.content for c in chunks])
