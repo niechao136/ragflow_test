@@ -48,7 +48,8 @@ async def ragflow_retrieve(query: str, config: Optional[RunnableConfig] = None) 
     chunks: List[Chunk] = rag.retrieve(
         question=query,
         dataset_ids=dataset_ids,
-        top_k=top_k
+        top_k=top_k,
+        page_size=top_k
     )
 
     sources = []

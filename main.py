@@ -1,3 +1,4 @@
+import os
 import json
 import uuid
 from typing import List, Optional
@@ -8,9 +9,19 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
+from dotenv import load_dotenv
+from pathlib import Path
 
 from graph import graph
 from tools import rag
+
+
+load_dotenv()
+
+
+FILE_PATH = Path(__file__).resolve()
+DATA_DEV = FILE_PATH / "file"
+DATA_DIR = Path(os.getenv("DATA_DIR", DATA_DEV))
 
 
 class QuestionRequest(BaseModel):
@@ -139,7 +150,7 @@ async def health():
     return {"status": "healthy", "ragflow_connected": ragflow_connected}
 
 
-app.mount("/file", StaticFiles(directory="file"), name="file")
+app.mount("/file", StaticFiles(directory=str(DATA_DIR)), name="file")
 app.mount("/", StaticFiles(directory="static", html=True), name="static")
 
 

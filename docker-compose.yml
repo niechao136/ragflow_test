@@ -1,0 +1,20 @@
+services:
+  # 后端 Python API
+  api:
+    build: .
+    container_name: ragflow-test
+    env_file: .env
+    volumes:
+      # 宿主机相对路径 : 容器内路径
+      - ./file:/app/file
+    ports:
+      - "10097:8080"
+    environment:
+      # 资料文件夹，默认为 /app/file
+      - DATA_DIR=${DATA_DIR:-/app/file}
+    networks:
+      - agent-network
+
+networks:
+  agent-network:
+    driver: bridge
