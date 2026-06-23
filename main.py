@@ -20,8 +20,10 @@ load_dotenv()
 
 
 FILE_PATH = Path(__file__).resolve()
-DATA_DEV = FILE_PATH / "file"
+ROOT_DIR = FILE_PATH.parent
+DATA_DEV = ROOT_DIR / "file"
 DATA_DIR = Path(os.getenv("DATA_DIR", DATA_DEV))
+STATIC_DIR = ROOT_DIR / "static"
 
 
 class QuestionRequest(BaseModel):
@@ -151,7 +153,7 @@ async def health():
 
 
 app.mount("/file", StaticFiles(directory=str(DATA_DIR)), name="file")
-app.mount("/", StaticFiles(directory="static", html=True), name="static")
+app.mount("/", StaticFiles(directory=str(STATIC_DIR), html=True), name="static")
 
 
 if __name__ == "__main__":

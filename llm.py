@@ -6,7 +6,7 @@ load_dotenv()
 
 LLM_MODEL = os.getenv("LLM_MODEL", "gemma4")
 LLM_BASE_URL = os.getenv("LLM_BASE_URL")
-LLM_API_KEY = os.getenv("LLM_API_KEY", "EMPTY")
+LLM_API_KEY = os.getenv("LLM_API_KEY", "api_key")
 
 llm = ChatOpenAI(
     model=LLM_MODEL,
