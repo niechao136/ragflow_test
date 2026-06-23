@@ -33,8 +33,7 @@ RUN uv pip install --system --no-cache -r pyproject.toml || \
     uv sync --system --no-cache
 
 # 7. 复制源码
-COPY src ./src
-COPY static ./static
+COPY . ./
 
 # 8. 启动命令
 # 既然用了 --system，直接调用 uvicorn 即可
